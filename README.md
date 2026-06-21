@@ -45,4 +45,21 @@ vercel deploy --prod
 - v0.4 — Pre-Mortem Generator + voice input.
 - v1.0 — Team-mode + Obsidian-Sync.
 
-Detailed spec + roadmap live in `omnopsis-planning/docs/superpowers/specs/2026-05-18-clearpath-52-design.md` and `roadmap-clearpath-52.md`.
+Detailed spec + roadmap are maintained in the private Neckarshore AI planning workspace.
+
+## FAQ
+
+**What is ClearPath?**
+A mental firewall against cognitive bias. You describe a decision; ClearPath names the three biases most likely distorting your thinking and enforces a 60-second pause before you act.
+
+**Can I use it today?**
+Yes — it's a working v0.1 prototype: a single page, 18 verified biases, the Friction-by-Design timer. Early, but real.
+
+**Do you store my decisions or track me?**
+No. No auth, no persistence, no analytics — use is fully anonymous. Your decision text is sent to the AI model for the single analysis and not retained by ClearPath.
+
+**Where does the analysis come from?**
+Anthropic's Claude (via the Vercel AI SDK) reasoning over 18 verified cognitive biases bundled as static data — not a black box of scraped opinions.
+
+**Is this a product or a side-project?**
+A GmanFooFoo side-project under the Neckarshore AI umbrella. The roadmap (Decision-Cemetery, full Dobelli 52, team-mode) is above.
