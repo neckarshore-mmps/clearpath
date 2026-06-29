@@ -1,0 +1,26 @@
+version: 2
+
+# ClearPath v0.2a — Security Gate-Spec (WS-B2) G8: Dependabot version updates.
+# Security updates are enabled separately at the repo level
+# (security_and_analysis.dependabot_security_updates). versioning-strategy
+# "increase" keeps the exact pins (no ^/~ reintroduced) — Dependabot proposes a
+# new exact version instead of widening the range, so the audited tree stays the
+# shipped tree.
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    versioning-strategy: increase
+    labels:
+      - dependencies
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+      - github-actions

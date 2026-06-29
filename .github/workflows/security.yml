@@ -1,0 +1,88 @@
+name: security
+
+# ClearPath v0.2a — Security Gate-Spec (WS-B2) G8 acceptance surface.
+# The repo is public since 2026-06-22; a leaked secret in git history is
+# exploitable the moment a real key exists. These gates run on every PR, on
+# pushes to main, on a weekly schedule (full-history sweep), and on demand.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    # Weekly full-history secret sweep — Mondays 03:17 UTC.
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gitleaks:
+    name: gitleaks full-history secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history is required for --log-opts=--all (scan every commit on
+          # every ref, not just the PR diff). A shallow clone would silently
+          # miss a secret buried in an older commit.
+          fetch-depth: 0
+      - name: Install gitleaks
+        run: |
+          VERSION=8.30.1
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz" -o gitleaks.tar.gz
+          tar -xzf gitleaks.tar.gz gitleaks
+          sudo mv gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+      - name: Scan full git history
+        run: |
+          gitleaks git . --log-opts="--all" --redact \
+            --report-format json --report-path gitleaks-report.json
+      - name: Store gitleaks report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-report
+          path: gitleaks-report.json
+          if-no-files-found: warn
+
+  npm-audit:
+    name: npm audit (high + critical)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - name: Fail on any high or critical advisory
+        run: npm audit --audit-level=high
+
+  dep-pinning:
+    name: dependencies exact-pinned
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assert no ^ or ~ ranges (audited tree == shipped tree, G8)
+        run: |
+          node -e '
+            const pkg = require("./package.json");
+            const offenders = [];
+            for (const section of ["dependencies", "devDependencies"]) {
+              for (const [name, spec] of Object.entries(pkg[section] || {})) {
+                if (/^[\^~]/.test(spec)) offenders.push(section + "." + name + "=" + spec);
+              }
+            }
+            if (offenders.length) {
+              console.error("Non-exact version specs found:\n" + offenders.join("\n"));
+              process.exit(1);
+            }
+            console.log("OK: all dependencies + devDependencies are exact-pinned.");
+          '
+
+# ── S6 extension point (Security Gate-Spec G2) ────────────────────────────────
+# The prompt-IP bundle-canary and outbound-result-canary jobs land HERE in S6,
+# once Workstream P authors real Bias.prompt_fragment content. Extend this
+# workflow additively (add jobs) — do not restructure the gates above.
