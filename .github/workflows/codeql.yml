@@ -1,0 +1,47 @@
+name: codeql
+
+# ClearPath — SAST via CodeQL (#270 §3.4, estate supply-chain hardening).
+# The repo is TypeScript/JavaScript (Next.js App Router) with no analyzable
+# Python source, so a single javascript-typescript analysis covers the tree.
+# build-mode none: CodeQL reads the source directly — no `npm ci` / build step.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly re-scan so newly-published queries reach already-shipped code —
+    # Mondays 04:23 UTC (offset from the security.yml gitleaks sweep at 03:17).
+    - cron: "23 4 * * 1"
+
+# Least-privilege default for every job in this file. Scorecard grades the
+# top-level block per workflow file; the analyze job additively grants only
+# the one write scope CodeQL needs to publish its results.
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: analyze (javascript-typescript)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # checkout the source
+      security-events: write # upload SARIF results to code-scanning
+      actions: read # read workflow run metadata (private-repo parity)
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@dfad8f8ebc168f044d22d94180b54591ef6c0321 # v3.34.0
+        with:
+          # Plural `languages:` — the singular `language:` is silently ignored
+          # (caught in the #270 OVA pilot). Single language, still the plural key.
+          languages: javascript-typescript
+          build-mode: none
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@dfad8f8ebc168f044d22d94180b54591ef6c0321 # v3.34.0
+        with:
+          category: "/language:javascript-typescript"
