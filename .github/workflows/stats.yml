@@ -17,6 +17,12 @@ on:
 permissions:
   contents: read
 
+# Serialize runs: two rapid pushes to main must not race on the git push
+# of the stats commit. No cancel — every push gets its accurate count.
+concurrency:
+  group: stats-emit
+  cancel-in-progress: false
+
 jobs:
   emit-stats:
     name: emit test-stats
@@ -26,6 +32,10 @@ jobs:
       contents: write # commits stats.json back to main
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          # Do not leave the write-scoped token in .git/config while npm ci
+          # and vitest execute third-party code; inject it only at push time.
+          persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "24"
@@ -41,5 +51,6 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
           git add stats.json
           git diff --staged --quiet || { git commit -m "chore: update stats.json [skip ci]"; git push; }
