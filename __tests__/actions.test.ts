@@ -180,6 +180,13 @@ describe('analyzeDecision — error classification', () => {
       kind: 'provider_unavailable',
     },
     {
+      label: 'credit/billing failure → provider_unavailable (never leak billing state)',
+      error: new Error(
+        'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing.',
+      ),
+      kind: 'provider_unavailable',
+    },
+    {
       label: 'schema validation failure → schema_mismatch',
       error: new Error('response did not match schema: validation failed'),
       kind: 'schema_mismatch',
@@ -207,4 +214,16 @@ describe('analyzeDecision — error classification', () => {
       }
     })
   }
+
+  it('never echoes raw provider error text to the client', async () => {
+    generateObjectMock.mockRejectedValue(
+      new Error('internal detail: account acct_12345 flagged'),
+    )
+    const result = await analyzeDecision(DECISION)
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error).not.toContain('acct_12345')
+      expect(result.error).not.toContain('internal detail')
+    }
+  })
 })

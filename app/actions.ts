@@ -55,7 +55,13 @@ function classifyError(err: unknown): {
         message: "Rate limit reached. Wait a moment and try again.",
       };
     }
-    if (m.includes("503") || m.includes("502") || m.includes("overloaded")) {
+    if (
+      m.includes("503") ||
+      m.includes("502") ||
+      m.includes("overloaded") ||
+      m.includes("credit balance") ||
+      m.includes("billing")
+    ) {
       return {
         kind: "provider_unavailable",
         message: "The AI provider is temporarily unavailable. Please try again shortly.",
@@ -67,7 +73,13 @@ function classifyError(err: unknown): {
         message: "The model returned an unexpected format. Please try again.",
       };
     }
-    return { kind: "unknown", message: `Analysis failed: ${err.message}` };
+    // Never echo raw provider errors to the (anonymous) client — they can
+    // carry operator details (billing state, account hints). The real cause
+    // goes to the server log in the catch block below.
+    return {
+      kind: "unknown",
+      message: "Analysis failed unexpectedly. Please try again.",
+    };
   }
   return { kind: "unknown", message: "Analysis failed: unknown error." };
 }
@@ -141,6 +153,9 @@ export async function analyzeDecision(
       clearTimeout(timer);
     }
   } catch (err) {
+    // Operator-facing: the real cause lands in the server (Vercel) log.
+    // The client only ever receives the sanitized message below.
+    console.error("[clearpath] analysis failed:", err);
     const { kind, message } = classifyError(err);
     return { ok: false, kind, error: message };
   }
