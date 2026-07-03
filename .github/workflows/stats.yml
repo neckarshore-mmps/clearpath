@@ -17,6 +17,13 @@ name: stats
 # Dependabot PRs run with a read-only GITHUB_TOKEN; they cannot push, but
 # dependency bumps do not change test counts, so the diff guard exits
 # before any push is attempted.
+#
+# KNOWN CAVEAT (GITHUB_TOKEN recursion guard): the bot's stats commit does
+# NOT retrigger workflow runs, so after it lands the PR's required checks
+# sit on the previous head. Revive them by pushing any commit with user
+# credentials or closing/reopening the PR. Only affects PRs that change
+# test counts; estate-level fix (PAT/GitHub-App or check-based producer)
+# is tracked with MASCHIN.
 
 on:
   pull_request:
