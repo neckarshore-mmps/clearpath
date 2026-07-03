@@ -105,7 +105,7 @@ export async function analyzeDecision(
     const timer = setTimeout(() => controller.abort(), ANALYSIS_TIMEOUT_MS);
     try {
       const { object } = await generateObject({
-        model: anthropic("claude-haiku-4-5"),
+        model: anthropic(process.env.CLEARPATH_MODEL ?? "claude-sonnet-4-5"),
         schema: biasAnalysisSchema,
         system: buildSystemPrompt(biases),
         prompt: buildUserPrompt(trimmed),
