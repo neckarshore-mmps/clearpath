@@ -2,37 +2,51 @@ name: stats
 
 # ClearPath test-stats producer (estate test-scope tile).
 # Emits the contract-conformant stats.json from vitest's own JSON reporter
-# (runner-reported, never grep) and commits it back to main.
+# (runner-reported, never grep) and commits it to the PR branch when the
+# test counts changed. main is protected (PR-only + required checks), so a
+# push-to-main commit-back is structurally impossible here; since ALL
+# changes reach main through PRs, emitting at PR time covers every change
+# and the file lands on main via the normal review gate.
 # Contract: neckarshore-planning/docs/reference/stats-json-contract.md
 #
-# Loop guards (both required):
-#   - push-to-main only, never on PR (avoids a commit loop via PR builds)
-#   - the stats commit carries [skip ci]; the `if` guard is belt-and-braces
-#     on top of GitHub's built-in [skip ci] handling.
+# Loop guard: the commit is only made when the `tests` object differs from
+# the version at HEAD — the bot's own commit triggers one more round that
+# finds identical counts and stops. Deliberately NO skip-ci marker: the
+# required checks must run on the bot commit for the PR to stay mergeable.
+#
+# Dependabot PRs run with a read-only GITHUB_TOKEN; they cannot push, but
+# dependency bumps do not change test counts, so the diff guard exits
+# before any push is attempted.
+#
+# KNOWN CAVEAT (GITHUB_TOKEN recursion guard): the bot's stats commit does
+# NOT retrigger workflow runs, so after it lands the PR's required checks
+# sit on the previous head. Revive them by pushing any commit with user
+# credentials or closing/reopening the PR. Only affects PRs that change
+# test counts; estate-level fix (PAT/GitHub-App or check-based producer)
+# is tracked with MASCHIN.
 
 on:
-  push:
-    branches: [main]
+  pull_request:
 
 permissions:
   contents: read
 
-# Serialize runs: two rapid pushes to main must not race on the git push
-# of the stats commit. No cancel — every push gets its accurate count.
 concurrency:
-  group: stats-emit
-  cancel-in-progress: false
+  group: stats-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   emit-stats:
     name: emit test-stats
-    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    # Same-repo PRs only — fork PRs carry no push credential and untrusted refs.
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
-      contents: write # commits stats.json back to main
+      contents: write # pushes the stats commit to the PR head branch
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
+          ref: ${{ github.event.pull_request.head.sha }}
           # Do not leave the write-scoped token in .git/config while npm ci
           # and vitest execute third-party code; inject it only at push time.
           persist-credentials: false
@@ -46,11 +60,19 @@ jobs:
         with:
           runners: "unit:vitest:.vitest-report.json"
           out: stats.json
-          sha: ${{ github.sha }}
-      - name: Commit stats.json
+          sha: ${{ github.event.pull_request.head.sha }}
+      - name: Commit stats.json to the PR branch when test counts changed
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
+          if git show HEAD:stats.json > /tmp/stats-prev.json 2>/dev/null \
+             && python3 -c "import json,sys; a=json.load(open('/tmp/stats-prev.json')); b=json.load(open('stats.json')); sys.exit(0 if a.get('tests')==b.get('tests') else 1)"; then
+            echo "Test counts unchanged — no stats commit."
+            exit 0
+          fi
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git remote set-url origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
           git add stats.json
-          git diff --staged --quiet || { git commit -m "chore: update stats.json [skip ci]"; git push; }
+          git commit -m "chore: update stats.json"
+          git push origin "HEAD:refs/heads/$HEAD_REF"
