@@ -25,7 +25,7 @@ Use one of these private channels instead:
 
 1. **GitHub private vulnerability reporting (preferred).** Open a private
    advisory at
-   [github.com/neckarshore-mmps/clearpath-52/security/advisories/new](https://github.com/neckarshore-mmps/clearpath-52/security/advisories/new).
+   [github.com/neckarshore-mmps/clearpath/security/advisories/new](https://github.com/neckarshore-mmps/clearpath/security/advisories/new).
    This keeps the report visible only to the maintainer until a fix ships.
 2. **Email.** Write to **german@rauhut.com** with `ClearPath security` in the
    subject line. PGP is not required; if you prefer encrypted contact, say so
