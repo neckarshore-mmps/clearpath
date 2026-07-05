@@ -51,6 +51,26 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+
+  /**
+   * Product rename (2026-07-05): the canonical production URL is now the branded
+   * domain https://clearpath.neckarshore.ai. The legacy Vercel auto-domain from
+   * before the project rename (clearpath-52.vercel.app) is kept as a permanent
+   * (308) redirect to the branded domain so old links resolve and search engines
+   * consolidate on one canonical host (Rail R5). Host-scoped via `has` so the
+   * branded domain and the new clearpath.vercel.app auto-domain pass through
+   * untouched.
+   */
+  async redirects() {
+    return [
+      {
+        source: "/:path*",
+        has: [{ type: "host", value: "clearpath-52.vercel.app" }],
+        destination: "https://clearpath.neckarshore.ai/:path*",
+        permanent: true,
+      },
+    ];
+  },
 };
 
 export default nextConfig;
