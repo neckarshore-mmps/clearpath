@@ -34,7 +34,7 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@dfad8f8ebc168f044d22d94180b54591ef6c0321 # v3.34.0
+        uses: github/codeql-action/init@54f647b7e1bb85c95cddabcd46b0c578ec92bc1a # v4.36.3
         with:
           # Plural `languages:` — the singular `language:` is silently ignored
           # (caught in the #270 OVA pilot). Single language, still the plural key.
