@@ -15,6 +15,23 @@ updates:
     versioning-strategy: increase
     labels:
       - dependencies
+    groups:
+      # Grouping aligned with the auto-merge safe class (dependabot-auto-merge.yml)
+      # so the boring class self-clears atomically and only the review-worthy bumps
+      # surface individually:
+      #   - npm-development: dev deps, minor+patch  -> auto (minor&&dev, or patch)
+      #   - npm-production:  prod deps, patch only   -> auto (patch)
+      #   - runtime minor (prod, minor): ungrouped -> individual PR -> MANUAL
+      #   - any major:                   ungrouped -> individual PR -> MANUAL
+      npm-development:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
+      npm-production:
+        dependency-type: production
+        update-types:
+          - patch
 
   - package-ecosystem: github-actions
     directory: "/"
@@ -24,3 +41,30 @@ updates:
     labels:
       - dependencies
       - github-actions
+    groups:
+      # CodeQL's init and analyze are the SAME action at the same SHA and must move
+      # together. Grouping them across ALL update-types (majors included) is the point:
+      # ungrouped, a major arrives as two PRs that each break the pair, and neither can
+      # ever pass. Review is NOT weakened — the combined PR is still a major, and the
+      # adopted policy holds ALL github-actions majors to manual review (major -> manual
+      # wins universally, no per-action name list). A human still merges it.
+      #
+      # Declared BEFORE github-actions-minor-patch: the "*" pattern below would otherwise
+      # swallow the codeql entries if Dependabot applies first-match-wins on overlap.
+      codeql-action:
+        patterns:
+          - "github/codeql-action*"
+        update-types:
+          - major
+          - minor
+          - patch
+
+      # Non-major actions bumps batch into one auto-mergeable PR; an actions MAJOR
+      # stays ungrouped so it surfaces individually for review — except codeql, which
+      # the group above deliberately keeps together across majors too.
+      github-actions-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
