@@ -18,7 +18,7 @@
  *   5. Two proxy() invocations produce distinct nonces (per-request freshness)
  */
 
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { NextRequest } from 'next/server'
 import { proxy, buildCsp } from '../proxy'
 
@@ -37,15 +37,13 @@ function parseCsp(csp: string): Map<string, string[]> {
   return map
 }
 
-// ---------------------------------------------------------------------------
-// Temporarily override NODE_ENV for prod-policy assertions.
-// ---------------------------------------------------------------------------
-const originalEnv = process.env.NODE_ENV
-
+// No NODE_ENV juggling here: the prod-policy tests below call
+// `buildCsp(nonce, { isDev: false })` directly, so nothing in this file reads or
+// writes process.env. The save/restore pair that used to sit at this spot had
+// no assignment left to undo, and next@16.3.0's types make NODE_ENV read-only,
+// which turned the dead restore into a type error (TS2540). Removed rather than
+// worked around — it guarded nothing.
 describe('proxy CSP — S1 acceptance gate', () => {
-  afterEach(() => {
-    process.env.NODE_ENV = originalEnv
-  })
 
   // ── Test 1: real proxy() sets CSP on the response ─────────────────────────
   it('sets Content-Security-Policy on the response', () => {
