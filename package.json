@@ -9,7 +9,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "3.0.78",
+    "@ai-sdk/anthropic": "4.0.36",
     "ai": "6.0.184",
     "next": "16.3.0",
     "react": "19.2.8",
