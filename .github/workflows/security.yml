@@ -47,6 +47,11 @@ jobs:
           path: gitleaks-report.json
           if-no-files-found: warn
 
+  # The job id and display name are DELIBERATELY unchanged. `npm audit
+  # (high + critical)` is the required-check string in branch protection;
+  # renaming it to match the new implementation would point protection at a
+  # check that never reports, which blocks every merge permanently. The step
+  # below changed, the contract above it did not.
   npm-audit:
     name: npm audit (high + critical)
     runs-on: ubuntu-latest
@@ -57,8 +62,12 @@ jobs:
           node-version: "24"
           cache: npm
       - run: npm ci
-      - name: Fail on any high or critical advisory
-        run: npm audit --audit-level=high
+      # Same severity floor as the bare `npm audit --audit-level=high` this
+      # replaces, plus the one thing that command could not do: say "known, no
+      # forward fix" for a named advisory, with a reason and a hard expiry.
+      # See scripts/audit-gate.mjs. The allowlist is EMPTY.
+      - name: Fail on any unaccepted high or critical advisory
+        run: node scripts/audit-gate.mjs
 
   dep-pinning:
     name: dependencies exact-pinned
