@@ -67,6 +67,8 @@ jobs:
           # A failing vitest step ends the job before this point, so an emitted file is always a
           # green run. The outcome is passed anyway so the file says so instead of assuming it.
           test_result: ${{ steps.vitest.outcome }}
+      - name: "PROBE (throwaway, reverted in the next commit): corrupt tests.total by one"
+        run: jq '.tests.total += 1' stats.json > /tmp/s.json && mv /tmp/s.json stats.json
       # Estate structural contract check (clearpath#91, same invariants as trustscope e2e.yml).
       # Fail BEFORE the commit step, so a malformed stats.json never lands on a PR branch.
       - name: Validate emitted stats.json against the contract
