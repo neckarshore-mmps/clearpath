@@ -1,15 +1,15 @@
 {
   "repo": "neckarshore-mmps/clearpath",
-  "audited_sha": "30e9092bb58f4533408c43d32368bc4f741ac685",
+  "audited_sha": "ca36508d2c5316ffdfe6084b7434be0b11c17b3d",
   "red": false,
   "red_detail": null,
   "tests": {
-    "total": 57,
+    "total": 72,
     "byType": {
-      "unit": 57
+      "unit": 72
     },
     "declared": {},
     "lenses": {}
   },
-  "updatedAt": "2026-09-23T11:54:17Z"
+  "updatedAt": "2026-10-08T07:42:36Z"
 }
