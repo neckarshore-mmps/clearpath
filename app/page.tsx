@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition, useRef, useEffect } from "react";
+import Link from "next/link";
 import { analyzeDecision, type AnalysisResult } from "./actions";
 import { BiasCard } from "@/components/BiasCard";
 import { VetoTimer } from "@/components/VetoTimer";
@@ -230,6 +231,20 @@ export default function Home() {
         <span>ClearPath v0.1 · 18 verified biases</span>
         <span>Via Negativa · Friction by Design</span>
       </footer>
+      {/* The imprint must be directly reachable from the start page (§ 5 DDG,
+          planning #3136). The privacy link joins it with step 3 of that ticket. */}
+      <nav
+        aria-label="Legal"
+        className="w-full max-w-2xl mt-4 text-xs text-zinc-600 dark:text-zinc-300"
+      >
+        <Link
+          href="/impressum"
+          lang="de"
+          className="underline underline-offset-4 decoration-zinc-400 hover:decoration-zinc-900 dark:hover:decoration-zinc-100"
+        >
+          Impressum
+        </Link>
+      </nav>
     </main>
   );
 }
