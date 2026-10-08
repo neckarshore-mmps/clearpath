@@ -15,6 +15,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { inspect } from 'node:util'
 import biasesData from '../data/biases.json'
 import type { Bias } from '../lib/schema'
 
@@ -225,5 +226,99 @@ describe('analyzeDecision — error classification', () => {
       expect(result.error).not.toContain('acct_12345')
       expect(result.error).not.toContain('internal detail')
     }
+  })
+})
+
+/**
+ * WHAT THE SERVER LOG MAY HOLD OF A FAILED ANALYSIS — planning #3136, DPO
+ * opinion of 2026-10-08, section 2 (MEDIUM, Art. 5(1)(c) and (f)).
+ *
+ * The AI SDK's errors carry the request and the model's answer as properties
+ * (`requestBodyValues`, `responseBody`, `text`, and a `cause` that may hold
+ * them again). The request is the visitor's text; the answer quotes it by
+ * design. A log line that writes the error object writes both. The privacy
+ * page says we store none of it, so the line may hold the error's kind, its
+ * name and a status code, and nothing else.
+ *
+ * WHAT THIS TEST CANNOT DO: it reads what this code hands to console.error.
+ * It does not read Vercel's log, and it says nothing about what the platform
+ * records of a request on its own.
+ */
+describe('analyzeDecision — what a failure writes to the log', () => {
+  const MARKER = 'MARKER-7f3a-visitor-wrote-this'
+
+  function written(spy: ReturnType<typeof vi.spyOn>): string {
+    // util.inspect with unlimited depth and hidden properties: at least as
+    // much as Node's console would print of each argument.
+    return spy.mock.calls
+      .map((args: unknown[]) =>
+        args
+          .map((a) => inspect(a, { depth: null, showHidden: true, maxStringLength: null }))
+          .join(' '),
+      )
+      .join('\n')
+  }
+
+  function sdkError(name: string, statusCode: number | undefined) {
+    return Object.assign(new Error(`provider said: ${MARKER}`), {
+      name,
+      statusCode,
+      requestBodyValues: { messages: [{ role: 'user', content: MARKER }] },
+      responseBody: `{"error":"echo ${MARKER}"}`,
+      text: `The user's situation: ${MARKER}`,
+      cause: new Error(`inner ${MARKER}`),
+    })
+  }
+
+  let spy: ReturnType<typeof vi.spyOn>
+
+  beforeEach(() => {
+    spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    spy.mockRestore()
+  })
+
+  it('writes nothing of the request, the answer, the message or the cause', async () => {
+    generateObjectMock.mockRejectedValue(sdkError('AI_APICallError', 529))
+    await analyzeDecision(`${DECISION} ${MARKER}`)
+    expect(spy).toHaveBeenCalledTimes(1)
+    expect(written(spy)).not.toContain(MARKER)
+  })
+
+  it('writes the kind, the name and the status code', async () => {
+    generateObjectMock.mockRejectedValue(sdkError('AI_APICallError', 429))
+    await analyzeDecision(DECISION)
+    const line = written(spy)
+    expect(line).toContain('[clearpath] analysis failed')
+    expect(line).toContain('kind=unknown')
+    expect(line).toContain('name=AI_APICallError')
+    expect(line).toContain('status=429')
+  })
+
+  it('writes a name only when it looks like a class name', async () => {
+    generateObjectMock.mockRejectedValue(sdkError(`Err ${MARKER} {"x":1}`, undefined))
+    await analyzeDecision(DECISION)
+    const line = written(spy)
+    expect(line).not.toContain(MARKER)
+    expect(line).toContain('name=-')
+    expect(line).toContain('status=-')
+  })
+
+  it('writes a fixed line for a throw that is not an Error', async () => {
+    generateObjectMock.mockRejectedValue(`string failure ${MARKER}`)
+    await analyzeDecision(DECISION)
+    const line = written(spy)
+    expect(line).not.toContain(MARKER)
+    expect(line).toContain('kind=unknown')
+    expect(line).toContain('name=-')
+  })
+
+  it('hands console.error one string and no object', async () => {
+    generateObjectMock.mockRejectedValue(sdkError('AI_NoObjectGeneratedError', undefined))
+    await analyzeDecision(DECISION)
+    expect(spy.mock.calls[0]).toHaveLength(1)
+    expect(typeof spy.mock.calls[0][0]).toBe('string')
   })
 })
