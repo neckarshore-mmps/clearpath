@@ -5,6 +5,7 @@ import { anthropic } from "@ai-sdk/anthropic";
 import biasesData from "@/data/biases.json";
 import { biasAnalysisSchema, type Bias, type BiasAnalysis } from "@/lib/schema";
 import { buildSystemPrompt, buildUserPrompt } from "@/lib/prompt";
+import { failureLogLine } from "@/lib/failure-log";
 
 const biases = biasesData as Bias[];
 
@@ -74,8 +75,8 @@ function classifyError(err: unknown): {
       };
     }
     // Never echo raw provider errors to the (anonymous) client — they can
-    // carry operator details (billing state, account hints). The real cause
-    // goes to the server log in the catch block below.
+    // carry operator details (billing state, account hints). The server log
+    // gets kind, class name and status code only (lib/failure-log.ts).
     return {
       kind: "unknown",
       message: "Analysis failed unexpectedly. Please try again.",
@@ -153,10 +154,12 @@ export async function analyzeDecision(
       clearTimeout(timer);
     }
   } catch (err) {
-    // Operator-facing: the real cause lands in the server (Vercel) log.
-    // The client only ever receives the sanitized message below.
-    console.error("[clearpath] analysis failed:", err);
+    // The client only ever receives the sanitized message below. The server
+    // log gets one fixed-shape line: kind, class name, status code. NEVER the
+    // error object or its message — the SDK's errors carry the visitor's text
+    // and the model's answer (lib/failure-log.ts, planning #3136).
     const { kind, message } = classifyError(err);
+    console.error(failureLogLine(err, kind));
     return { ok: false, kind, error: message };
   }
 }
