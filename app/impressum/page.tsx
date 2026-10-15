@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
+import { LegalNav } from "@/components/LegalNav";
 
 /**
  * Imprint (§ 5 DDG) for clearpath.neckarshore.ai — planning #3136, step 2.
@@ -12,9 +13,10 @@ import type { Metadata } from "next";
  * 2026-10-08 and are the same there.
  *
  * WHAT IS LEFT OUT ON PURPOSE
- * - No link to a privacy page: /datenschutz does not exist yet (step 3 of
- *   #3136, waits for the DPO's wording). It comes with that step. The test in
- *   __tests__/impressum.test.tsx fails on a link to a route that is not there.
+ * - Nothing: the privacy pages /datenschutz and /privacy exist since step 3
+ *   of #3136 and are linked through LegalNav at the foot of the page. The
+ *   test in __tests__/legal-pages.test.tsx fails on a link to a route that is
+ *   not there.
  * - No paragraph on liability for links: this site links to no other site.
  *   If a later page does, the paragraph comes back with it.
  * - No VAT ID line: § 27a UStG asks for one only where one is assigned.
@@ -121,6 +123,8 @@ export default function ImpressumPage() {
           </div>
         </section>
       </div>
+
+      <LegalNav />
     </main>
   );
 }
