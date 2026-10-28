@@ -50,3 +50,44 @@ jobs:
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Indirect (transitive) MINOR that closes a security advisory joins the safe
+      # class (Founder 2026-10-28, from Bob's report 2026-10-23 fm 6: clearpath#123,
+      # vite, sat green and unmerged for days while the audit gate it would clear
+      # blocked every other PR).
+      #
+      # How "closes a security advisory" is known WITHOUT a new credential:
+      # fetch-metadata reports the alert only with `alert-lookup`, which needs a
+      # personal token. But Dependabot VERSION updates touch only direct
+      # dependencies unless dependabot.yml has an `allow:` block (GitHub docs,
+      # "allow": default is all explicitly defined dependencies). So with no
+      # `allow:` on the base branch, an indirect PR can only come from a SECURITY
+      # update. This step proves that precondition from the base branch (never
+      # from the PR) and fails closed: a read error turns this step red (visible)
+      # and arms nothing; an `allow:` block arms nothing.
+      - name: Is this indirect minor a security update?
+        id: indirect
+        if: >
+          steps.meta.outputs.update-type == 'version-update:semver-minor' &&
+          steps.meta.outputs.dependency-type == 'indirect'
+        run: |
+          set -euo pipefail
+          cfg="$(gh api "repos/${REPO}/contents/.github/dependabot.yml?ref=${BASE_SHA}" --jq '.content' | base64 -d)"
+          if [ -z "$cfg" ]; then echo "dependabot.yml unreadable -> manual review"; exit 0; fi
+          if printf '%s\n' "$cfg" | grep -Eq '^[[:space:]]*allow:'; then
+            echo "dependabot.yml has an allow: block, indirect version updates are possible -> manual review"
+            exit 0
+          fi
+          echo "no allow: block on ${BASE_SHA}: an indirect PR is a security update"
+          echo "security=true" >> "$GITHUB_OUTPUT"
+        env:
+          REPO: ${{ github.repository }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Enable auto-merge for an indirect security minor
+        if: steps.indirect.outputs.security == 'true'
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
