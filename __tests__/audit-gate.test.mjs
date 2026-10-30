@@ -23,7 +23,7 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { ALLOWLIST, collectAdvisories, evaluate, findExpired } from '../scripts/audit-gate.mjs'
+import { ALLOWLIST, checkOverrides, collectAdvisories, evaluate, findExpired, OVERRIDES, readOverrides } from '../scripts/audit-gate.mjs'
 
 /** Minimal npm-audit-shaped payload. */
 function payload(vulns) {
@@ -150,5 +150,36 @@ describe('audit-gate — the shipped allowlist', () => {
   it('has unique ids', () => {
     const ids = ALLOWLIST.map((e) => e.id)
     expect(new Set(ids).size).toBe(ids.length)
+  })
+})
+
+describe('overrides register (planning #1961, same as neckarshore-website#342)', () => {
+  const REG = { postcss: { expires: '2026-12-31', reason: 'drop once every parent resolves >= x by itself' } }
+
+  it('reports an override without a register entry as unregistered', () => {
+    const r = checkOverrides({ postcss: '>=8.5.23 <9', nanoid: '>=3.3.18 <4' }, REG, '2026-10-29')
+    expect(r.unregistered).toEqual(['nanoid'])
+    expect(r.expired).toHaveLength(0)
+    expect(r.orphaned).toHaveLength(0)
+  })
+
+  it('reports a registered override past its date as expired', () => {
+    const r = checkOverrides({ postcss: '>=8.5.23 <9' }, REG, '2027-01-01')
+    expect(r.expired.map((e) => e.key)).toEqual(['postcss'])
+  })
+
+  it('reports a register entry whose override is gone as orphaned', () => {
+    expect(checkOverrides({}, REG, '2026-10-29').orphaned).toEqual(['postcss'])
+  })
+
+  it('throws on a malformed register entry (fail closed)', () => {
+    expect(() => checkOverrides({ x: '1' }, { x: { reason: 'r' } }, '2026-10-29')).toThrow()
+    expect(() => checkOverrides({ x: '1' }, { x: { expires: '31.12.2026', reason: 'r' } }, '2026-10-29')).toThrow()
+  })
+
+  it('the SHIPPED package.json overrides and the SHIPPED register agree today', () => {
+    const today = new Date().toISOString().slice(0, 10)
+    const r = checkOverrides(readOverrides(), OVERRIDES, today)
+    expect([...r.unregistered, ...r.expired.map((e) => e.key), ...r.orphaned]).toEqual([])
   })
 })

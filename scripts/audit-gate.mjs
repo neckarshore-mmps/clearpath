@@ -64,6 +64,7 @@
  */
 
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 
 /**
  * Advisories we consciously accept, each with a reason and a hard expiry.
@@ -96,6 +97,18 @@ export const ALLOWLIST = [
   // is how a gate becomes decorative.
 ];
 
+
+/**
+ * `overrides` in package.json, each with a reason and a hard expiry (planning #1961; same
+ * mechanism as neckarshore-website#342). An override is an acceptance in disguise and it ages
+ * AGAINST the repair: nothing turns red when it stops being needed, or when it starts holding a
+ * package below its own declared range. On 2026-10-29 both overrides here (nanoid >=3.3.18 <4, postcss >=8.5.23 <9) were idle: without them npm audit reports the same two dev-only moderates as with them, and none high.
+ *
+ * Every key under `overrides` needs an entry here and every entry an override; an entry past
+ * its date turns the gate red. The reason names when the override may go.
+ * Shape: { "<override key>": { expires: "YYYY-MM-DD", reason: "..." } }
+ */
+export const OVERRIDES = {};
 
 const GATED = new Set(["high", "critical"]);
 
@@ -172,6 +185,32 @@ export function findExpired(allowlist, today) {
   return expired;
 }
 
+/**
+ * Holds package.json `overrides` against the OVERRIDES register; throws on a malformed entry.
+ *   unregistered: override with no entry · expired: entry past its date · orphaned: entry, no override
+ */
+export function checkOverrides(overrides, register, today) {
+  const keys = Object.keys(overrides ?? {});
+  const result = { unregistered: [], expired: [], orphaned: [] };
+  for (const [key, entry] of Object.entries(register)) {
+    if (!entry?.expires || !entry?.reason) {
+      throw new Error(`overrides register entry "${key}" is missing expires/reason`);
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(entry.expires)) {
+      throw new Error(`overrides register entry "${key}" has a malformed expires date: ${entry.expires}`);
+    }
+    if (!keys.includes(key)) result.orphaned.push(key);
+    else if (entry.expires < today) result.expired.push({ key, ...entry });
+  }
+  result.unregistered = keys.filter((k) => !Object.hasOwn(register, k));
+  return result;
+}
+
+/** package.json's `overrides`, read from the file the install actually used. */
+export function readOverrides(path = new URL("../package.json", import.meta.url)) {
+  return JSON.parse(readFileSync(path, "utf8")).overrides ?? {};
+}
+
 export function evaluate(raw, allowlist, today) {
   const found = collectAdvisories(raw);
   const expired = findExpired(allowlist, today);
@@ -186,8 +225,10 @@ export function evaluate(raw, allowlist, today) {
 function main() {
   const today = new Date().toISOString().slice(0, 10);
   let result;
+  let ov;
   try {
     result = evaluate(runAudit(), ALLOWLIST, today);
+    ov = checkOverrides(readOverrides(), OVERRIDES, today);
   } catch (err) {
     die(err.message);
     return;
@@ -231,10 +272,25 @@ function main() {
     }
   }
 
-  if (result.expired.length || result.unlisted.length) {
+  if (ov.unregistered.length) {
+    console.error("\x1b[31mOVERRIDES without a register entry (scripts/audit-gate.mjs OVERRIDES):\x1b[0m");
+    for (const k of ov.unregistered) console.error(`  x ${k}  — add { expires, reason }, or drop the override`);
+  }
+  if (ov.expired.length) {
+    console.error("\x1b[31mEXPIRED overrides — is the pin still needed, and is it now a cap?\x1b[0m");
+    for (const e of ov.expired) console.error(`  x ${e.key}  expired ${e.expires} — ${e.reason}`);
+  }
+  if (ov.orphaned.length) {
+    console.error("\x1b[31mRegister entries without an override — drop the line:\x1b[0m");
+    for (const k of ov.orphaned) console.error(`  x ${k}`);
+  }
+  const ovProblems = ov.unregistered.length + ov.expired.length + ov.orphaned.length;
+
+  if (result.expired.length || result.unlisted.length || ovProblems) {
     die(
       `${result.unlisted.length} unaccepted advisory/advisories, ` +
-        `${result.expired.length} expired allowlist entry/entries.`,
+        `${result.expired.length} expired allowlist entry/entries, ` +
+        `${ovProblems} override problem(s).`,
     );
   }
 
