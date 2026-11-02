@@ -118,6 +118,9 @@ export async function analyzeDecision(
     const timer = setTimeout(() => controller.abort(), ANALYSIS_TIMEOUT_MS);
     try {
       const { object } = await generateObject({
+        // The privacy pages (app/privacy, app/datenschutz) and the consent
+        // note on the start page name Anthropic. A model of another provider
+        // here makes them false on that day (planning #3136).
         model: anthropic(process.env.CLEARPATH_MODEL ?? "claude-sonnet-4-5"),
         schema: biasAnalysisSchema,
         system: buildSystemPrompt(biases),

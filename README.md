@@ -35,7 +35,7 @@ vercel deploy --prod
 
 - Single page, three states (input → analyzing → veto).
 - 18 verified cognitive biases bundled as static JSON.
-- No auth, no persistence, no tracking — anonymous use.
+- No account, no persistence, no analytics.
 - 60-second timer enforces the Friction-by-Design pause before any action.
 
 ## Roadmap
@@ -56,7 +56,7 @@ A mental firewall against cognitive bias. You describe a decision; ClearPath nam
 Yes — it's a working v0.1 prototype: a single page, 18 verified biases, the Friction-by-Design timer. Early, but real.
 
 **Do you store my decisions or track me?**
-No. No auth, no persistence, no analytics — use is fully anonymous. Your decision text is sent to the AI model for the single analysis and not retained by ClearPath.
+No. No account, no persistence, no analytics. Your decision text is sent to the AI model for the single analysis and not retained by ClearPath. The details are on the [privacy page](https://clearpath.neckarshore.ai/privacy).
 
 **Where does the analysis come from?**
 Anthropic's Claude (via the Vercel AI SDK) reasoning over 18 verified cognitive biases bundled as static data — not a black box of scraped opinions.

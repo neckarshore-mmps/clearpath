@@ -5,6 +5,7 @@ import Link from "next/link";
 import { analyzeDecision, type AnalysisResult } from "./actions";
 import { BiasCard } from "@/components/BiasCard";
 import { VetoTimer } from "@/components/VetoTimer";
+import { LegalNav } from "@/components/LegalNav";
 
 type View =
   | { kind: "input" }
@@ -56,13 +57,10 @@ export default function Home() {
     setTimerDone(false);
   }
 
-  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    // Cmd+Enter (mac) or Ctrl+Enter (windows/linux) submits.
-    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-      e.preventDefault();
-      submit();
-    }
-  }
+  // No keyboard shortcut submits the text. The click on "Agree and run veto
+  // check" is the visitor's consent to sending it to Anthropic (planning #3136,
+  // DPO way 1); Cmd/Ctrl+Enter went past that click and was removed on the
+  // Founder's decision of 2026-10-15.
 
   return (
     <main className="min-h-screen flex flex-col items-center px-6 py-12 bg-zinc-50 dark:bg-black">
@@ -96,27 +94,45 @@ export default function Home() {
               id="decision"
               value={decision}
               onChange={(e) => setDecision(e.target.value)}
-              onKeyDown={handleKeyDown}
               rows={6}
               placeholder="e.g. I want to invest 50k in a friend's startup that has tripled in valuation over the last six months..."
               className="w-full p-4 border border-zinc-300 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-100"
               maxLength={4000}
               autoFocus
             />
+            {/* The information at collection (Art. 13(1) GDPR) and the consent
+                (Art. 6(1)(a), 9(2)(a)), in the DPO's wording on planning #3136,
+                section 4. It stands before the button and before the first
+                click. Change it only together with app/privacy and
+                app/datenschutz. */}
+            <p
+              id="consent-note"
+              className="text-xs leading-relaxed text-zinc-600 dark:text-zinc-400"
+            >
+              Your text is sent to Anthropic, an AI provider, for this one
+              analysis. We do not store it; Anthropic deletes it within 30 days
+              and processes it in the USA as well. Leave out other people&apos;s
+              names. By clicking &ldquo;Agree and run veto check&rdquo; you agree
+              to this, also for sensitive details you choose to include.{" "}
+              <Link
+                href="/privacy"
+                className="underline underline-offset-4 decoration-zinc-400 hover:decoration-zinc-900 dark:hover:decoration-zinc-100"
+              >
+                Privacy
+              </Link>
+            </p>
             <div className="flex items-center justify-between gap-4">
               <span className="text-xs text-zinc-400 tabular-nums">
                 {decision.length}/4000
-                <span className="hidden sm:inline ml-3 text-zinc-500">
-                  ⌘+↵ to submit
-                </span>
               </span>
               <button
                 type="button"
                 onClick={submit}
                 disabled={decision.trim().length < 10 || isPending}
+                aria-describedby="consent-note"
                 className="px-6 py-2.5 bg-zinc-900 dark:bg-zinc-100 text-zinc-50 dark:text-zinc-900 rounded-md font-medium hover:bg-zinc-700 dark:hover:bg-zinc-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
-                Run veto check
+                Agree and run veto check
               </button>
             </div>
           </div>
@@ -231,20 +247,9 @@ export default function Home() {
         <span>ClearPath v0.1 · 18 verified biases</span>
         <span>Via Negativa · Friction by Design</span>
       </footer>
-      {/* The imprint must be directly reachable from the start page (§ 5 DDG,
-          planning #3136). The privacy link joins it with step 3 of that ticket. */}
-      <nav
-        aria-label="Legal"
-        className="w-full max-w-2xl mt-4 text-xs text-zinc-600 dark:text-zinc-300"
-      >
-        <Link
-          href="/impressum"
-          lang="de"
-          className="underline underline-offset-4 decoration-zinc-400 hover:decoration-zinc-900 dark:hover:decoration-zinc-100"
-        >
-          Impressum
-        </Link>
-      </nav>
+      {/* Imprint and both privacy pages, reachable from every page (§ 5 DDG,
+          Art. 13 GDPR; planning #3136). */}
+      <LegalNav />
     </main>
   );
 }
