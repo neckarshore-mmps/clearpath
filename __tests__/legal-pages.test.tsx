@@ -51,9 +51,9 @@ function routeExists(href: string): boolean {
 function visibleText(markup: string): string {
   return markup
     .replace(/<[^>]+>/g, " ")
-    .replace(/&amp;/g, "&")
     .replace(/&#x27;|&#39;/g, "'")
     .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&")
     .replace(/\s+/g, " ")
     .replace(/ ([.,;:)])/g, "$1")
     .trim();
