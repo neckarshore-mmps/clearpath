@@ -1,74 +1,67 @@
 name: stats
 
 # ClearPath test-stats producer (estate test-scope tile).
-# Emits the contract-conformant stats.json from vitest's own JSON reporter
-# (runner-reported, never grep) and commits it to the PR branch when the
-# test counts changed. main is protected (PR-only + required checks), so a
-# push-to-main commit-back is structurally impossible here; since ALL
-# changes reach main through PRs, emitting at PR time covers every change
-# and the file lands on main via the normal review gate.
-# Contract: neckarshore-planning/docs/reference/stats-json-contract.md
+# Emits the contract-conformant stats.json from vitest's own JSON reporter (runner-reported,
+# never grep) and publishes it to the UNPROTECTED `stats-data` branch, never to a PR head and
+# never to main. Contract: neckarshore-planning/docs/reference/stats-json-contract.md §1a
+# (protected-producer exception, `statsRef: stats-data`). Same shape as trustscope e2e.yml.
 #
-# Loop guard: the commit is only made when `tests`, `red` or `red_detail`
-# differs from the version at HEAD — the bot's own commit triggers one more round that
-# finds identical counts and stops. Deliberately NO skip-ci marker: the
-# required checks must run on the bot commit for the PR to stay mergeable.
+# Why not the PR head any more (neckarshore-planning, Bob row BOB-1108-CLEARPATH-STATS-DATA):
+# the old producer committed stats.json to the PR head with the GITHUB_TOKEN. GitHub's recursion
+# guard then left the required checks without a run on that head, and the PR read blocked until
+# someone pushed with user credentials (clearpath #114 twice, #133). Publishing after the merge,
+# to a data branch no required check guards, removes the cause instead of the symptom.
 #
-# Dependabot PRs run with a read-only GITHUB_TOKEN; they cannot push, but
-# dependency bumps do not change test counts, so the diff guard exits
-# before any push is attempted.
+# Two jobs for least privilege:
+#   generate-stats  (contents: read)  — npm ci, vitest and the third-party test-stats-action run
+#                                       here; the token they can reach cannot push.
+#   publish-stats   (contents: write) — downloads the validated file and pushes it with git
+#                                       plumbing. No npm ci, no third-party action, so no untrusted
+#                                       code runs while the write token is in scope.
 #
-# KNOWN CAVEAT (GITHUB_TOKEN recursion guard): the bot's stats commit does
-# NOT retrigger workflow runs, so after it lands the PR's required checks
-# sit on the previous head. Revive them by pushing any commit with user
-# credentials or closing/reopening the PR. Only affects PRs that change
-# test counts; estate-level fix (PAT/GitHub-App or check-based producer)
-# is tracked with MASCHIN.
+# The stats.json still on main is the last PR-time copy. It stays until the neckarshore-website
+# aggregator reads `statsRef: stats-data` for clearpath; removing it first would blind that tile.
 
 on:
-  pull_request:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "stats.json"
+  workflow_dispatch:
 
 permissions:
   contents: read
 
-concurrency:
-  group: stats-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
-
 jobs:
-  emit-stats:
-    name: emit test-stats
-    # Same-repo PRs only — fork PRs carry no push credential and untrusted refs.
-    if: github.event.pull_request.head.repo.full_name == github.repository
+  generate-stats:
+    name: generate stats.json
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
-      contents: write # pushes the stats commit to the PR head branch
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          # Do not leave the write-scoped token in .git/config while npm ci
-          # and vitest execute third-party code; inject it only at push time.
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
           cache: npm
       - run: npm ci
+      # continue-on-error: a red run still writes the report and is emitted red:true, never a
+      # stale-green count and never a silent skip (contract §1).
       - id: vitest
+        continue-on-error: true
         run: npx vitest run --reporter=json --outputFile=.vitest-report.json
-      # v1.2.0 (was v1.0.0 @101f0c2): v1.0.0 emits `red: null`, which fails the contract check
-      # below on every run. v1.2.0 takes test_result and emits red/red_detail/declared (clearpath#91).
       - uses: neckarshore-ai/test-stats-action@eff3ddbc9e7d9b68db38f451d0395681ff8df592 # v1.2.0
         with:
+          repo: ${{ github.repository }}
           runners: "unit:vitest:.vitest-report.json"
           out: stats.json
-          sha: ${{ github.event.pull_request.head.sha }}
-          # A failing vitest step ends the job before this point, so an emitted file is always a
-          # green run. The outcome is passed anyway so the file says so instead of assuming it.
+          sha: ${{ github.sha }}
           test_result: ${{ steps.vitest.outcome }}
-      # Estate structural contract check (clearpath#91, same invariants as trustscope e2e.yml).
-      # Fail BEFORE the commit step, so a malformed stats.json never lands on a PR branch.
+      # Structural contract gate, before the artifact: a malformed stats.json is never published.
       - name: Validate emitted stats.json against the contract
         run: |
           jq -e --arg repo "$GITHUB_REPOSITORY" '
@@ -79,18 +72,64 @@ jobs:
           ' stats.json > /dev/null \
             || { echo "::error::stats.json failed contract validation"; cat stats.json; exit 1; }
           echo "stats.json is contract-valid:"; cat stats.json
-      - name: Commit stats.json to the PR branch when test counts or red state changed
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: stats-json
+          path: stats.json
+          retention-days: 1
+          if-no-files-found: error
+
+  publish-stats:
+    name: publish stats.json (stats-data branch)
+    needs: generate-stats
+    if: needs.generate-stats.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    concurrency:
+      group: publish-stats-${{ github.ref }}
+      queue: max
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: stats-json
+      # Git plumbing, not a branch switch: stats-data shares no history with main. The tree is
+      # exactly {stats.json, vercel.json}; vercel.json turns Vercel deploys off for this
+      # data-only branch (Vercel reads the gate from the pushed branch itself, trustscope
+      # 2026-07-12). Diff-guard ignores updatedAt, so a re-run on the same sha does not churn.
+      - name: Publish stats.json to stats-data when it changed
         env:
-          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          GIT_AUTHOR_NAME: "github-actions[bot]"
+          GIT_AUTHOR_EMAIL: "github-actions[bot]@users.noreply.github.com"
+          GIT_COMMITTER_NAME: "github-actions[bot]"
+          GIT_COMMITTER_EMAIL: "github-actions[bot]@users.noreply.github.com"
+          GH_TOKEN: ${{ github.token }}
         run: |
-          if git show HEAD:stats.json > /tmp/stats-prev.json 2>/dev/null \
-             && python3 -c "import json,sys; a=json.load(open('/tmp/stats-prev.json')); b=json.load(open('stats.json')); k=('tests','red','red_detail'); sys.exit(0 if all(a.get(x)==b.get(x) for x in k) else 1)"; then
-            echo "Test counts and red state unchanged — no stats commit."
+          set -euo pipefail
+          norm() { jq -S 'del(.updatedAt)' "$1" 2>/dev/null; }
+          VERCEL_JSON='{"$schema":"https://openapi.vercel.sh/vercel.json","git":{"deploymentEnabled":false}}'
+          git fetch origin +refs/heads/stats-data:refs/remotes/origin/stats-data 2>/dev/null || true
+          if git show origin/stats-data:stats.json > /tmp/prev-stats.json 2>/dev/null \
+             && [ "$(norm /tmp/prev-stats.json)" = "$(norm stats.json)" ] \
+             && [ "$(git show origin/stats-data:vercel.json 2>/dev/null)" = "$VERCEL_JSON" ]; then
+            echo "stats.json unchanged and the deploy gate is current — nothing to publish."
             exit 0
           fi
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git remote set-url origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
-          git add stats.json
-          git commit -m "chore: update stats.json"
-          git push origin "HEAD:refs/heads/$HEAD_REF"
+          STATS_BLOB=$(git hash-object -w stats.json)
+          VERCEL_BLOB=$(printf '%s\n' "$VERCEL_JSON" | git hash-object -w --stdin)
+          TREE=$(printf '100644 blob %s\tstats.json\n100644 blob %s\tvercel.json\n' "$STATS_BLOB" "$VERCEL_BLOB" | git mktree)
+          MSG="chore(stats): emit stats.json @ ${GITHUB_SHA:0:7}"
+          if git rev-parse --verify origin/stats-data >/dev/null 2>&1; then
+            COMMIT=$(git commit-tree "$TREE" -p origin/stats-data -m "$MSG")
+          else
+            COMMIT=$(git commit-tree "$TREE" -m "$MSG")
+          fi
+          # An empty source refspec would DELETE stats-data; refuse instead.
+          [ -n "$COMMIT" ] || { echo "::error::commit-tree produced no commit — refusing to push"; exit 1; }
+          git -c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')" \
+            push origin "${COMMIT}:refs/heads/stats-data"
